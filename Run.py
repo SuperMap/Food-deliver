@@ -40,6 +40,6 @@ def runDeliver():
 
 if __name__ == "__main__":
     # maze game
-    env = DeliverEnv()
+    env = DeliverEnv('680507')
     RL = DeepQNetwork()
     runDeliver()

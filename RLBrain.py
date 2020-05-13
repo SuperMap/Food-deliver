@@ -18,28 +18,28 @@ from demo.util import DistanceUtils
 
 class GCN(nn.Module):
     def __init__(self):
-        in_dim = 4
-        hidden_dim = 10
+        in_dim = 1
+        hidden_dim = 256
         n_classes = 2
         super(GCN, self).__init__()
         self.conv1 = GraphConv(in_dim, hidden_dim)
-        self.conv2 = GraphConv(hidden_dim, 512)
+        self.conv2 = GraphConv(hidden_dim, hidden_dim)
         # 二分类，以第一个数为合理的值。也就是输出形状为（2），第一个为合理的值
-        self.classify = nn.Linear(128, n_classes)
-        self.classify.weight.data.normal_(0, 0.1)
+        self.classify = nn.Linear(hidden_dim, n_classes)
+        # self.classify.weight.data.normal_(0, 0.1)
 
     def forward(self, g):
         # Use node degree as the initial node feature. For undirected graphs, the in-degree
         # is the same as the out_degree.
-        expect_time = g.ndata['expect_time'].view(-1, 1).float()
-        promise_deliver_time = g.ndata['promise_deliver_time'].view(-1, 1)
-        courier_level = g.ndata['courier_level'].view(-1, 1)
-        courier_speed = g.ndata['courier_speed'].view(-1, 1)
-        h = np.stack((expect_time, promise_deliver_time, courier_level, courier_speed),1).reshape(-1, 4)
-        h = torch.as_tensor(h)
-        # h = expect_time
 
-        # h = g.in_degrees().view(-1, 1).float()
+        # expect_time = g.ndata['expect_time'].view(-1, 1).float()
+        # promise_deliver_time = g.ndata['promise_deliver_time'].view(-1, 1)
+        # courier_level = g.ndata['courier_level'].view(-1, 1)
+        # courier_speed = g.ndata['courier_speed'].view(-1, 1)
+        # h = np.stack((expect_time, promise_deliver_time, courier_level, courier_speed),1).reshape(-1, 4)
+        # h = torch.as_tensor(h)
+
+        h = g.in_degrees().view(-1, 1).float()
         # print(h.shape)
         # Perform graph convolution and activation function.
         h = F.relu(self.conv1(g, h))
@@ -73,7 +73,7 @@ class DeepQNetwork(object):
         self.batchSize = 16
         self.gamma = 0.9
         self.epsilon = 0.9
-        self.memory = list()
+        self.memory: List[Transition] = [Transition(None, None, None, None) for _ in range(self.memory_size)]
         self.optimizer = torch.optim.Adam(self.eval_net.parameters(), lr=0.01)  # torch 的优化器
         self.loss_func = nn.MSELoss()   # 误差公式
 
@@ -84,10 +84,10 @@ class DeepQNetwork(object):
         if np.random.randn() <= self.epsilon:  # greedy policy
             # 找到每个骑手候选动作中值最大的动作
             for courier, graphs in courierObservationGraphs.items():
-                batchGraphs = dgl.batch(graphs)
+                batchGraphs = graphs[0] if len(graphs) < 2 else dgl.batch(graphs)
                 action_value = self.eval_net.forward(batchGraphs)
                 # 找出哪一个最大
-                maxIndex = action_value[:, 0].argmax(1)
+                maxIndex = action_value[:, 0].argmax(0)
                 actions[courier] = courierCandidateActions.get(courier)[maxIndex]
         else:  # random policy
             # 在候选动作中随机选择一个动作，构造ActionNode类进行返回
@@ -99,7 +99,7 @@ class DeepQNetwork(object):
     def store_transition(self, observation, actions, reward, observation_):
         transition = Transition(observation, actions, reward, observation_)
         index = self.memory_counter % self.memory_size
-        self.memory[index, :] = transition
+        self.memory[index] = transition
         self.memory_counter += 1
 
     def learn(self):
@@ -109,14 +109,15 @@ class DeepQNetwork(object):
         self.learn_step_counter += 1
 
         # sample batch from memory
-        transition_index = np.random.choice(self.memory_size, self.batchSize)
+        transition_index = [int(x) for x in np.random.choice(self.memory_size, self.batchSize)]
 
         # q_eval
         # 根据observation构成批次的图，由于一个observation就是很多张图，很多张图只对应一个reward，先一个observation一个训练
         batchReward = []
         batchQEval = []
         batchQNext = []
-        for memory in self.memory[transition_index]:
+        for index in transition_index:
+            memory = self.memory[index]
             # 0. 将当前observation对应的reward加入batchReward
             batchReward.append(memory.reward)
             # 针对一个observation，actions， reward以及observation_计算结果
@@ -162,8 +163,10 @@ class DeepQNetwork(object):
         :param currentStats:
         :return:
         """
-        lastActionNode = courier.planRoutes[-1]
-        lastActionTime = lastActionNode.actionTime
+        # 要加判断，planRoutes长度可能为0，-1角标会报错
+        # lastActionNode = courier.planRoutes[-1]
+        # lastActionTime = lastActionNode.actionTime
+
         # 得到最后一个动作所在的位置
         # 得到要计算的动作所在的位置
         # 计算距离，除速度得到所需时间，如果这一步是取餐（2），则要在订单做出来之后
@@ -189,27 +192,34 @@ class DeepQNetwork(object):
             for courier in observation.courierPool.couriers:
                 courierCandidateActions[courier] = list()
                 # 如果最后一个执行动作没有做完，则添加一个actionType为-1的actionNode，代表什么也不做
-                if courier.planRoutes[-1].actionTime < observation.timeStamp:
-                    candidateActionNode = ActionNode(-1, None, -1)
-                    courierCandidateActions.get(courier).append(candidateActionNode)
-                    continue
+                if len(courier.planRoutes) > 0:
+                    if courier.planRoutes[-1].actionTime < observation.timeStamp:
+                        candidateActionNode = ActionNode(-1, None, -1, None, None)
+                        courierCandidateActions.get(courier).append(candidateActionNode)
+                        continue
                 for order in courier.orders:
                     if order.status == 4 or order.status == 3:
                         continue
                     elif order.status == 2:
                         actionTypeTime = self.__calActionNodeTime(courier, order, 3)
-                        candidateActionNode = ActionNode(3, order.id, actionTypeTime)
+                        candidateActionNode = ActionNode(3, order.id, actionTypeTime, None, None)
                         courierCandidateActions.get(courier).append(candidateActionNode)
                     elif order.status == 1:
                         actionTypeTime = self.__calActionNodeTime(courier, order, 2)
-                        candidateActionNode = ActionNode(2, order.id, actionTypeTime)
+                        candidateActionNode = ActionNode(2, order.id, actionTypeTime, None, None)
                         courierCandidateActions.get(courier).append(candidateActionNode)
             # 2.1 得到待分配的新单
             orderPoolOrders = observation.orderPool.orders
-            newOrders = filter(lambda order: order.status == 0, orderPoolOrders)
+            newOrders = []
+            for order in orderPoolOrders:
+                if order.status == 0:
+                    newOrders.append(order)
             # 2.2 将新单的到店动作加到每一个骑手的候选动作中
             for newOrder in newOrders:
-                map(lambda courier, actionNodes: actionNodes.append(ActionNode(1, newOrder.id, self.__calActionNodeTime(courier, order, 1))), courierCandidateActions.keys(), courierCandidateActions.values())
+                # map(lambda courier, actionNodes: actionNodes.append(ActionNode(1, newOrder.id, self.__calActionNodeTime(courier, order, 1))), courierCandidateActions.keys(), courierCandidateActions.values())
+                for courier, actionNodes in courierCandidateActions.items():
+                    addActionNode = ActionNode(1, newOrder.id, self.__calActionNodeTime(courier, newOrder, 1), None, None)
+                    actionNodes.append(addActionNode)
         else:
             for courier, actionNode in actions.items():
                 courierCandidateActions[courier] = list(actionNode)
@@ -228,6 +238,13 @@ class DeepQNetwork(object):
                 # Todo
                 # 使用所有的节点构图
                 currentGraph = self.__generateGraph(courier, currentNodes)
+
+                # 纯测试代码，请无视
+                # currentGraph = DGLGraph()
+                # currentGraph.add_nodes(4)
+                # currentGraph.add_edges([0, 1, 2], [1, 2, 3])
+                # currentGraph.ndata['h'] = np.array([1, 2, 3, 4])
+
                 courierGraphs.get(courier).append(currentGraph)
         return courierCandidateActions, courierGraphs,
 
