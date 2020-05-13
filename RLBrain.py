@@ -11,7 +11,7 @@ from dgl.nn import GraphConv, GATConv
 from torch import nn
 import torch.nn.functional as F
 import numpy as np
-
+import networkx as nx
 from demo.dto import Courier, ActionNode
 from demo.util import DistanceUtils
 
@@ -227,11 +227,11 @@ class DeepQNetwork(object):
                     currentNodes = historyNodes
                 # Todo
                 # 使用所有的节点构图
-                currentGraph = __generateGraph(currentNodes)
+                currentGraph = self.__generateGraph(courier, currentNodes)
                 courierGraphs.get(courier).append(currentGraph)
-        return courierCandidateActions, courierGraphs
+        return courierCandidateActions, courierGraphs,
 
-    def __generateGraph(self, courier: Courier):
+    def __generateGraph(self, courier: Courier, currentNodes):
         """
         目标：已有骑手已完成的动作，依次加入可以加入的节点，形成若干图，放进图网络，得到合理值。
         :param couriers: 所有骑手的信息
@@ -252,7 +252,7 @@ class DeepQNetwork(object):
         # 骑士最大载单量
         maxloads = courier.maxLoads  # maxloads: 10
         # 骑士已完成的路径
-        planRoutes = courier.planRoutes
+        planRoutes = currentNodes
         # 骑士的订单
         orders = courier.orders
         courier_list.extend([id, areaId, courier_latitude, courier_longitude, speed,
