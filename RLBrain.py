@@ -171,14 +171,52 @@ class DeepQNetwork(object):
         :return:
         """
         # 要加判断，planRoutes长度可能为0，-1角标会报错
-        # lastActionNode = courier.planRoutes[-1]
-        # lastActionTime = lastActionNode.actionTime
+        if courier.planRoutes:
+            lastActionNode = courier.planRoutes[-1]
+            lastActionTime = lastActionNode.actionTime  # 最后一个动作得时间
+            # 得到最后一个动作所在的位置
+            lastActionType = lastActionNode.actionType
+            order_info = [i for i in courier.orders if lastActionNode.orderId == i.id]
+            if order_info:
+                if lastActionType == 1 or lastActionType == 2:
+                    if order_info:
+                        # 取到最后一个动作所在订单得取货地
+                        lastActionloc = order_info[0].srcLoc
+                    else:
+                        # 取到最后一个动作所在订单得送货地
+                        lastActionloc = order_info[0].dstLoc
+                # 得到要计算的动作所在的位置
+                    calActionloc1 = order.srcLoc
+                    calActionloc2 = order.dstLoc
+                    lng1 = lastActionloc.longitude
+                    lat1 = lastActionloc.latitude
+                    if currentStats == 1 :
+                        lng2 = calActionloc1.longitude
+                        lat2 = calActionloc1.latitude
+                        calDistance = DistanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
+                        calTime = calDistance / courier.speed
+                        # lastActionTime + 所需时间
+                        calActionTime = lastActionTime + calTime
+                    elif currentStats == 2:
+                        # 计算距离，除速度得到所需时间，如果这一步是取餐（2），则要在订单做出来之后
+                        lng2 = calActionloc1.longitude
+                        lat2 = calActionloc1.latitude
+                        calDistance = DistanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
+                        calTime = calDistance / courier.speed
+                        # 骑手到店时间 = 最后一个动作完成的时间+所需的时间
+                        courier_arriveTime = lastActionTime + calTime
+                        if courier_arriveTime < order.estimatedPrepareCompletedTime:
+                            calActionTime = order.estimatedPrepareCompletedTime
+                        else:
+                            calActionTime = courier_arriveTime
+                    else:
+                        lng2 = calActionloc2.longitude
+                        lat2 = calActionloc2.latitude
+                        calDistance = DistanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
+                        calTime = calDistance / courier.speed
+                        calActionTime = lastActionTime + calTime
 
-        # 得到最后一个动作所在的位置
-        # 得到要计算的动作所在的位置
-        # 计算距离，除速度得到所需时间，如果这一步是取餐（2），则要在订单做出来之后
-        # lastActionTime + 所需时间
-        return -1
+                    return calActionTime
 
     def __calGraphsByObservation(self, observation, actions: Dict[Courier, ActionNode] = None):
         """
@@ -344,20 +382,23 @@ class DeepQNetwork(object):
             # 找到规划路径行为对应订单
             order_info = [i for i in orders if i.id == planRoutes[index].orderId]
             # 订单创建时间 期望送达时间 预计取货地备货完成时间，骑士不能早于该时间取货
-            graph.nodes[index]['createTimestamp'] = order_info[0].createTimestamp
-            graph.nodes[index]['promiseDeliverTime'] = order_info[0].promiseDeliverTime
-            graph.nodes[index]['estimatedPrepareCompletedTime'] = order_info[0].estimatedPrepareCompletedTime
-            # 如果当前动作是到店 骑士的位置就是订单的取货点 取餐也是 送达时骑士的位置是订单的收货点
-            if planRoutes[index].actionType == 1 or planRoutes[index].actionType == 2:
-                lng1 = order_info[0].srcLoc.longitude
-                lat1 = order_info[0].srcLoc.latitude
-                graph.nodes[index]['courier_latitude'] = lat1
-                graph.nodes[index]['courier_longitude'] = lng1
-                graph.nodes[index]['order_id'] = order_info[0].id
+            if order_info :
+                graph.nodes[index]['createTimestamp'] = order_info[0].createTimestamp
+                graph.nodes[index]['promiseDeliverTime'] = order_info[0].promiseDeliverTime
+                graph.nodes[index]['estimatedPrepareCompletedTime'] = order_info[0].estimatedPrepareCompletedTime
+                # 如果当前动作是到店 骑士的位置就是订单的取货点 取餐也是 送达时骑士的位置是订单的收货点
+                if planRoutes[index].actionType == 1 or planRoutes[index].actionType == 2:
+                    lng1 = order_info[0].srcLoc.longitude
+                    lat1 = order_info[0].srcLoc.latitude
+                    graph.nodes[index]['courier_latitude'] = lat1
+                    graph.nodes[index]['courier_longitude'] = lng1
+                    graph.nodes[index]['order_id'] = order_info[0].id
+                else:
+                    lng2 = order_info[0].dstloc.longitude
+                    lat2 = order_info[0].dstLoc.latitude
+                    graph.nodes[index]['courier_latitude'] = lat2
+                    graph.nodes[index]['courier_longitude'] = lng2
+                    graph.nodes[index]['order_id'] = order_info[0].id
             else:
-                lng2 = order_info[0].dstloc.longitude
-                lat2 = order_info[0].dstLoc.latitude
-                graph.nodes[index]['courier_latitude'] = lat2
-                graph.nodes[index]['courier_longitude'] = lng2
-                graph.nodes[index]['order_id'] = order_info[0].id
+                return None
             return graph
