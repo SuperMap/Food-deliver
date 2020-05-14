@@ -161,7 +161,6 @@ class DeepQNetwork(object):
         loss.backward()
         self.optimizer.step()
 
-    # Todo
     def __calActionNodeTime(self, courier, order, currentStats):
         """
         通过courier找到上一个动作位置和时间，通过order与currentStats计算将要执行的动作的位置
@@ -264,6 +263,7 @@ class DeepQNetwork(object):
                 # map(lambda courier, actionNodes: actionNodes.append(ActionNode(1, newOrder.id, self.__calActionNodeTime(courier, order, 1))), courierCandidateActions.keys(), courierCandidateActions.values())
                 for courier, actionNodes in courierCandidateActions.items():
                     addActionNode = ActionNode(1, newOrder.id, self.__calActionNodeTime(courier, newOrder, 1), None, None)
+                    # addActionNode = ActionNode(1, newOrder.id, -1, None, None)
                     actionNodes.append(addActionNode)
 
             # 3. 如果没有动作可以做，则添加一个什么也不做的动作
@@ -282,13 +282,13 @@ class DeepQNetwork(object):
             for actionNode in actionNodes:
                 # 处理actionNode中 actionType为-1 的情情况，方式为：如果为-1，则不添加该节点，而只是把历史节点构图
                 currentNodes = None
-                if actionNode.actionTime > -1:
+                if actionNode.actionType > -1:
                     currentNodes = historyNodes.append(actionNode)
                 else:
                     currentNodes = historyNodes
                 # Todo
                 # 使用所有的节点构图
-                # currentGraph = self.__generateGraph(courier, currentNodes)
+                currentGraph = self.__generateGraph(courier, currentNodes)
 
                 # 纯测试代码，请无视
                 currentGraph = DGLGraph()
