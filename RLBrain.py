@@ -161,7 +161,7 @@ class DeepQNetwork(object):
         loss.backward()
         self.optimizer.step()
 
-    def __calActionNodeTime(self, courier, order, currentStats, currentContextTime):
+    def __calActionNodeTime(self, courier, order, currentStats, context):
         """
         通过courier找到上一个动作位置和时间，通过order与currentStats计算将要执行的动作的位置
         :param courier:
@@ -170,13 +170,43 @@ class DeepQNetwork(object):
         :return:
         """
         distanceUtils = DistanceUtils()
-        # 要加判断，planRoutes长度可能为0，-1角标会报错
-        if courier.planRoutes:
+        if len(courier.planRoutes) == 0 or courier.planRoutes[-1].actionType == -1:
+            calActionloc1 = order.srcLoc
+            calActionloc2 = order.dstLoc
+            lng1 = courier.loc.longitude
+            lat1 = courier.loc.latitude
+            if currentStats == 1:
+                lng2 = calActionloc1.longitude
+                lat2 = calActionloc1.latitude
+                calDistance = distanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
+                calTime = calDistance / courier.speed
+                # lastActionTime + 所需时间
+                calActionTime = context.timeStamp + calTime
+            elif currentStats == 2:
+                # 计算距离，除速度得到所需时间，如果这一步是取餐（2），则要在订单做出来之后
+                lng2 = calActionloc1.longitude
+                lat2 = calActionloc1.latitude
+                calDistance = distanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
+                calTime = calDistance / courier.speed
+                # 骑手到店时间 = 最后一个动作完成的时间+所需的时间
+                courier_arriveTime = context.timeStamp + calTime
+                if courier_arriveTime < order.estimatedPrepareCompletedTime:
+                    calActionTime = order.estimatedPrepareCompletedTime
+                else:
+                    calActionTime = courier_arriveTime
+            else:
+                lng2 = calActionloc2.longitude
+                lat2 = calActionloc2.latitude
+                calDistance = distanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
+                calTime = calDistance / courier.speed
+                calActionTime = context.timeStamp + calTime
+            return int(calActionTime)
+        else:
             lastActionNode = courier.planRoutes[-1]
             lastActionTime = lastActionNode.actionTime  # 最后一个动作得时间
             # 得到最后一个动作所在的位置
             lastActionType = lastActionNode.actionType
-            order_info = [i for i in courier.orders if lastActionNode.orderId == i.id]
+            order_info = [i for i in context.orderPool.orders if lastActionNode.orderId == i.id]
             if order_info:
                 if lastActionType == 1 or lastActionType == 2:
                     if order_info:
@@ -185,7 +215,7 @@ class DeepQNetwork(object):
                     else:
                         # 取到最后一个动作所在订单得送货地
                         lastActionloc = order_info[0].dstLoc
-                # 得到要计算的动作所在的位置
+                    # 得到要计算的动作所在的位置
                     calActionloc1 = order.srcLoc
                     calActionloc2 = order.dstLoc
                     lng1 = lastActionloc.longitude
@@ -216,39 +246,6 @@ class DeepQNetwork(object):
                         calTime = calDistance / courier.speed
                         calActionTime = lastActionTime + calTime
                     return int(calActionTime)
-        else:
-            # 如果列表中没有路径 就计算骑手得位置与将要执行动作的距离
-            calActionloc1 = order.srcLoc
-            calActionloc2 = order.dstLoc
-            lng1 = courier.loc.longitude
-            lat1 = courier.loc.latitude
-            if currentStats == 1:
-                lng2 = calActionloc1.longitude
-                lat2 = calActionloc1.latitude
-                calDistance = distanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
-                calTime = calDistance / courier.speed
-                # lastActionTime + 所需时间
-                calActionTime = currentContextTime + calTime
-            elif currentStats == 2:
-                # 计算距离，除速度得到所需时间，如果这一步是取餐（2），则要在订单做出来之后
-                lng2 = calActionloc1.longitude
-                lat2 = calActionloc1.latitude
-                calDistance = distanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
-                calTime = calDistance / courier.speed
-                # 骑手到店时间 = 最后一个动作完成的时间+所需的时间
-                courier_arriveTime = currentContextTime + calTime
-                if courier_arriveTime < order.estimatedPrepareCompletedTime:
-                    calActionTime = order.estimatedPrepareCompletedTime
-                else:
-                    calActionTime = courier_arriveTime
-            else:
-                lng2 = calActionloc2.longitude
-                lat2 = calActionloc2.latitude
-                calDistance = distanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
-                calTime = calDistance / courier.speed
-                calActionTime = currentContextTime + calTime
-
-            return int(calActionTime)
 
     def __calGraphsByObservation(self, observation, actions: Dict[Courier, ActionNode] = None):
         """
@@ -279,11 +276,11 @@ class DeepQNetwork(object):
                     if order.status == 4 or order.status == 3:
                         continue
                     elif order.status == 2:
-                        actionTypeTime = self.__calActionNodeTime(courier, order, 3, observation.timeStamp)
+                        actionTypeTime = self.__calActionNodeTime(courier, order, 3, observation)
                         candidateActionNode = ActionNode(3, order.id, actionTypeTime, None, None)
                         courierCandidateActions.get(courier).append(candidateActionNode)
                     elif order.status == 1:
-                        actionTypeTime = self.__calActionNodeTime(courier, order, 2, observation.timeStamp)
+                        actionTypeTime = self.__calActionNodeTime(courier, order, 2, observation)
                         candidateActionNode = ActionNode(2, order.id, actionTypeTime, None, None)
                         courierCandidateActions.get(courier).append(candidateActionNode)
             # 2.1 得到待分配的新单
@@ -296,7 +293,7 @@ class DeepQNetwork(object):
             for newOrder in newOrders:
                 # map(lambda courier, actionNodes: actionNodes.append(ActionNode(1, newOrder.id, self.__calActionNodeTime(courier, order, 1))), courierCandidateActions.keys(), courierCandidateActions.values())
                 for courier, actionNodes in courierCandidateActions.items():
-                    addActionNode = ActionNode(1, newOrder.id, self.__calActionNodeTime(courier, newOrder, 1, observation.timeStamp), None, None)
+                    addActionNode = ActionNode(1, newOrder.id, self.__calActionNodeTime(courier, newOrder, 1, observation), None, None)
                     actionNodes.append(addActionNode)
 
             # 3. 如果没有动作可以做，则添加一个什么也不做的动作
