@@ -165,6 +165,7 @@ class DeepQNetwork(object):
         lastActionNode = courier.planRoutes[-1]
         lastActionTime = lastActionNode.actionTime
         # 得到最后一个动作所在的位置
+        lastActionNode.orderId
         # 得到要计算的动作所在的位置
         # 计算距离，除速度得到所需时间，如果这一步是取餐（2），则要在订单做出来之后
         # lastActionTime + 所需时间
