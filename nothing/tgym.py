@@ -96,7 +96,8 @@ class DQN():
         q_next = self.target_net(batch_next_state).detach()
         q_target = batch_reward + GAMMA * q_next.max(1)[0].view(BATCH_SIZE, 1)
         loss = self.loss_func(q_eval, q_target)
-
+        print(q_eval, q_target, loss)
+        print('--'*50)
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()

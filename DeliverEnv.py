@@ -47,22 +47,26 @@ class DeliverEnv(object):
         # self.dataFilePaths = ['data/' + fileName + '.json' for fileName in self.areaIds]
         # self.contexts: Dict[str, DispatchContext] = {}
         self.areaId = _areaId
-        self.dataFilePath = 'data/' + self.areaId + '.json'
+        self.dataFilePath = './data/' + self.areaId + '.json'
         self._buildDeliver()
-        self.courierPlans: Dict[str, CourierPlan] = {}
         self.doneTimeStamp = 1575694166
         self.haveRequest = False
         self.reward = 0
+        self.requests = self.__readAllRequests()
+        self.currentStep = 0
 
-    def getOneJsonRequest(self):
+    def __readAllRequests(self):
         with open(self.dataFilePath, 'r') as r:
             # 第一行是开始的状态，在reset方法里会用，这里选择跳过
             lines = r.read().splitlines()[1:]
-            while True:
-                for line in lines:
-                    if line == lines[-1]:
-                        yield json.loads(line), False
-                    yield json.loads(line), True
+            return lines
+
+    def getOneJsonRequest(self):
+        index = self.currentStep % len(self.requests)
+        if index == len(self.requests)-1:
+            return json.loads(self.requests[index]), False
+        else:
+            return json.loads(self.requests[index]), True
 
     def _buildDeliver(self):
         self.context = DispatchContext(self.areaId, timeStamp=0)
@@ -91,7 +95,7 @@ class DeliverEnv(object):
             done = True
         # 是否还有新上线的骑手和订单
         if self.haveRequest:
-            json_request, isHaveRequest = next(self.getOneJsonRequest())
+            json_request, isHaveRequest = self.getOneJsonRequest()
             if not isHaveRequest:
                 self.haveRequest = False
             # 更新骑手与订单状态
@@ -136,8 +140,11 @@ class DeliverEnv(object):
                                 self.reward += 1
                             else:
                                 self.reward -= 1
+        self.currentStep += 1
         # 下一步状态
         return self.context, self.reward, done
 
     def render(self):
-        print(self.courierPlans, self.reward)
+        print(self.context.timeStamp, self.context.orderPool, self.reward)
+
+

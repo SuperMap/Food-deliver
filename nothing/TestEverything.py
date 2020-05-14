@@ -8,6 +8,8 @@ from typing import Dict, List
 import numpy as np
 import torch
 
+from demo.dto import Courier
+from DeliverEnv import DeliverEnv
 
 def getOne():
     with open('data/test.txt', 'r') as r:
@@ -33,11 +35,12 @@ def getOne1(loop=4):
 #         json_data = json.loads(line)
 #         json_data
 
+
 if __name__ == '__main__':
     # with open('data/context.pickle', 'rb') as r:
     #     context = pickle.load(r)
     #     print(context.areaId)
-    transition_index = [int(x) for x in np.random.choice(40, 16)]
-    for index in transition_index:
-        if not isinstance(index, int):
-            print(index)
+    deliverEnv = DeliverEnv('680507')
+    quest = deliverEnv.getOneJsonRequest()
+    for i in range(100):
+        print(next(quest))
