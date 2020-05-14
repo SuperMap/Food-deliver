@@ -51,4 +51,5 @@ class DispatchContext:
         courier.planRoutes = refreshNodeList
         if len(refreshNodeList) == 0 and len(actionNodeList) != 0:
             latestOrder: Order = self.orderPool.getOrder(actionNodeList[-1].orderId)
-            courier.setLoc(latestOrder.dstLoc)
+            if latestOrder is not None:
+                courier.setLoc(latestOrder.dstLoc)

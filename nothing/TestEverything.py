@@ -5,7 +5,7 @@ import json
 import pickle
 from functools import reduce
 from typing import Dict, List
-
+import numpy as np
 import torch
 
 
@@ -27,15 +27,17 @@ def getOne1(loop=4):
                 line = r.readline()
             yield None
 
-with open('data/test.txt') as r:
-    lines = r.read().splitlines()
-    for line in lines:
-        json_data = json.loads(line)
-        json_data
+# with open('data/test.txt') as r:
+#     lines = r.read().splitlines()
+#     for line in lines:
+#         json_data = json.loads(line)
+#         json_data
 
 if __name__ == '__main__':
     # with open('data/context.pickle', 'rb') as r:
     #     context = pickle.load(r)
     #     print(context.areaId)
-    aa = [True, True]
-    print(reduce(lambda x, y: x & y, aa))
+    transition_index = [int(x) for x in np.random.choice(40, 16)]
+    for index in transition_index:
+        if not isinstance(index, int):
+            print(index)

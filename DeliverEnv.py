@@ -7,8 +7,9 @@ from typing import List, Dict
 
 from demo.context import DispatchContext
 
-from demo.dto import DispatchRequest, CourierPlan, ActionNode, Courier
+from demo.dto import DispatchRequest, CourierPlan, ActionNode, Courier, Order
 from demo.service import DispatchService
+from nothing.app import toLocation
 
 dispatchService = DispatchService()
 
@@ -106,19 +107,19 @@ class DeliverEnv(object):
         # 奖励函数
         # 1.根据courierAction和时间改变当前的状态
         # 1.1 改变提交状态
-        for courier, cp in courierActions:
-            for a in cp.planRoutes:
-                a.setSubmitted(True)
+        for courier, cp in courierActions.items():
+            cp.setSubmitted(True)
         # 1.2 修改订单池中新单的状态
         allocatedOrders = list()
-        for courier, cp in courierActions:
-            for a in cp.planRoutes:
-                if a.actionType == 1:
-                    allocatedOrders.append(a.orderId)
+        for courier, cp in courierActions.items():
+            if cp.actionType == 1:
+                allocatedOrders.append(cp.orderId)
         self.context.markAllocatedOrders(allocatedOrders)
         # 1.3 根据courierActions修改骑手池的plan
         for courier, actionNode in courierActions.items():
-            self.context.courierPool.couriers.index(courier.id).planRoutes.append(actionNode)
+            for courierInPool in self.context.courierPool.couriers:
+                if courier.id == courierInPool.id:
+                    courierInPool.planRoutes.append(actionNode)
 
         # 2.检查按时、超时、还未完成订单，分别给1分、-1分、0分
         self.reward = 0
@@ -136,7 +137,7 @@ class DeliverEnv(object):
                             else:
                                 self.reward -= 1
         # 下一步状态
-        s_ = self.context, self.reward, done
+        return self.context, self.reward, done
 
     def render(self):
         print(self.courierPlans, self.reward)
