@@ -84,7 +84,7 @@ class DeepQNetwork(object):
         if np.random.randn() <= self.epsilon:  # greedy policy
             # 找到每个骑手候选动作中值最大的动作
             for courier, graphs in courierObservationGraphs.items():
-                batchGraphs = graphs[0] if len(graphs) < 2 else dgl.batch(graphs)
+                batchGraphs = dgl.batch(graphs)
                 action_value = self.eval_net.forward(batchGraphs)
                 # 找出哪一个最大
                 maxIndex = action_value[:, 0].argmax(0)
@@ -118,13 +118,19 @@ class DeepQNetwork(object):
         batchQNext = []
         for index in transition_index:
             memory = self.memory[index]
+            if memory.observation is None:
+                continue
             # 0. 将当前observation对应的reward加入batchReward
             batchReward.append(memory.reward)
             # 针对一个observation，actions， reward以及observation_计算结果
             # 1.1 使用observation与actions信息构造图，从observation得到每一个骑手的历史节点，从actions得到要加入的新的节点，合起来作为一个图
             _, courierObservationGraphs = self.__calGraphsByObservation(memory.observation, actions=memory.actions)
             # 1.2 将1.1中的所有图放入eval_net，得到预测的合理值（1，）
-            courierObservationBatchGraphs = dgl.batch(map(lambda x, y: x + y, courierObservationGraphs.values()))
+            # courierObservationBatchGraphs = dgl.batch(map(lambda x, y: x + y, courierObservationGraphs.values()))
+            courierObservationBatchGraphs = []
+            for graphs in courierObservationGraphs.values():
+                courierObservationBatchGraphs.append(graphs[0])
+            courierObservationBatchGraphs = dgl.batch(courierObservationBatchGraphs)
             courierQEval = self.eval_net(courierObservationBatchGraphs)[:, 0]
             courierQEval = torch.sum(torch.Tensor(courierQEval))
             # 1.3 将预测值求和加入batchQEval
@@ -146,15 +152,15 @@ class DeepQNetwork(object):
             batchQNext.append(courierQNext)
 
         # 3.计算qtarget和loss
-        q_target = np.array(batchReward) + self.gamma * np.array(batchQNext)
-        q_eval = torch.Tensor(batchQEval)
+        q_target = torch.Tensor(np.array(batchReward) + self.gamma * np.array(batchQNext)).detach()
+        q_target.requires_grad = True
+        q_eval = torch.Tensor(batchQEval).detach()
         loss = self.loss_func(q_eval, q_target)
-
+        # print(q_eval, q_target, loss)
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
-    # Todo
     def __calActionNodeTime(self, courier, order, currentStats, currentContextTime):
         """
         通过courier找到上一个动作位置和时间，通过order与currentStats计算将要执行的动作的位置
@@ -163,8 +169,8 @@ class DeepQNetwork(object):
         :param currentStats:
         :return:
         """
-        # 要加判断，planRoutes长度可能为0，-1角标会报错
         distanceUtils = DistanceUtils()
+        # 要加判断，planRoutes长度可能为0，-1角标会报错
         if courier.planRoutes:
             lastActionNode = courier.planRoutes[-1]
             lastActionTime = lastActionNode.actionTime  # 最后一个动作得时间
@@ -264,10 +270,11 @@ class DeepQNetwork(object):
                 courierCandidateActions[courier] = list()
                 # 如果最后一个执行动作没有做完，则添加一个actionType为-1的actionNode，代表什么也不做
                 if len(courier.planRoutes) > 0:
-                    if courier.planRoutes[-1].actionTime < observation.timeStamp:
-                        candidateActionNode = ActionNode(-1, None, -1, None, None)
-                        courierCandidateActions.get(courier).append(candidateActionNode)
-                        continue
+                    if courier.planRoutes[-1].actionType != -1:
+                        if courier.planRoutes[-1].actionTime < observation.timeStamp:
+                            candidateActionNode = ActionNode(-1, None, -1, None, None)
+                            courierCandidateActions.get(courier).append(candidateActionNode)
+                            continue
                 for order in courier.orders:
                     if order.status == 4 or order.status == 3:
                         continue
@@ -291,9 +298,15 @@ class DeepQNetwork(object):
                 for courier, actionNodes in courierCandidateActions.items():
                     addActionNode = ActionNode(1, newOrder.id, self.__calActionNodeTime(courier, newOrder, 1, observation.timeStamp), None, None)
                     actionNodes.append(addActionNode)
+
+            # 3. 如果没有动作可以做，则添加一个什么也不做的动作
+            for courier, actions in courierCandidateActions.items():
+                if len(actions) == 0:
+                    candidateActionNode = ActionNode(-1, None, -1, None, None)
+                    actions.append(candidateActionNode)
         else:
             for courier, actionNode in actions.items():
-                courierCandidateActions[courier] = list(actionNode)
+                courierCandidateActions[courier] = [actionNode]
 
         # 2.1 使用courierCandidateActions构造图
         for courier, actionNodes in courierCandidateActions.items():
@@ -301,12 +314,9 @@ class DeepQNetwork(object):
             historyNodes = courier.planRoutes
             for actionNode in actionNodes:
                 # 处理actionNode中 actionType为-1 的情情况，方式为：如果为-1，则不添加该节点，而只是把历史节点构图
-                currentNodes = None
-                if actionNode.actionTime > -1:
-                    historyNodes.append(actionNode)
-                    currentNodes = historyNodes
-                else:
-                    currentNodes = historyNodes
+                currentNodes = historyNodes
+                if actionNode.actionType > -1:
+                    currentNodes.append(actionNode)
                 # Todo
                 # 使用所有的节点构图
                 currentGraph = self.__generateGraph(courier, currentNodes)
