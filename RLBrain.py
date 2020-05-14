@@ -161,7 +161,7 @@ class DeepQNetwork(object):
         loss.backward()
         self.optimizer.step()
 
-    def __calActionNodeTime(self, courier, order, currentStats):
+    def __calActionNodeTime(self, courier, order, currentStats, currentContextTime):
         """
         通过courier找到上一个动作位置和时间，通过order与currentStats计算将要执行的动作的位置
         :param courier:
@@ -169,6 +169,7 @@ class DeepQNetwork(object):
         :param currentStats:
         :return:
         """
+        distanceUtils = DistanceUtils()
         # 要加判断，planRoutes长度可能为0，-1角标会报错
         if courier.planRoutes:
             lastActionNode = courier.planRoutes[-1]
@@ -294,7 +295,7 @@ class DeepQNetwork(object):
             for newOrder in newOrders:
                 # map(lambda courier, actionNodes: actionNodes.append(ActionNode(1, newOrder.id, self.__calActionNodeTime(courier, order, 1))), courierCandidateActions.keys(), courierCandidateActions.values())
                 for courier, actionNodes in courierCandidateActions.items():
-                    addActionNode = ActionNode(1, newOrder.id, self.__calActionNodeTime(courier, newOrder, 1), None, None)
+                    # addActionNode = ActionNode(1, newOrder.id, self.__calActionNodeTime(courier, newOrder, 1), None, None)
                     # addActionNode = ActionNode(1, newOrder.id, -1, None, None)
                     addActionNode = ActionNode(1, newOrder.id, self.__calActionNodeTime(courier, newOrder, 1, observation.timeStamp), None, None)
                     actionNodes.append(addActionNode)
@@ -314,11 +315,9 @@ class DeepQNetwork(object):
             historyNodes = courier.planRoutes
             for actionNode in actionNodes:
                 # 处理actionNode中 actionType为-1 的情情况，方式为：如果为-1，则不添加该节点，而只是把历史节点构图
-                currentNodes = None
+                currentNodes = historyNodes
                 if actionNode.actionType > -1:
-                    currentNodes = historyNodes.append(actionNode)
-                else:
-                    currentNodes = historyNodes
+                    currentNodes.append(actionNode)
                 # Todo
                 # 使用所有的节点构图
                 currentGraph = self.__generateGraph(courier, currentNodes)
