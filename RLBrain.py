@@ -395,12 +395,13 @@ class DeepQNetwork(object):
                 order_info = [i for i in orders if i.id == planRoutes[index].orderId]
                 # 下一个订单取餐
                 order_info1 = [i for i in orders if i.id == planRoutes[index+1].orderId]
-                lng1 = order_info[0].srcLoc.longitude
-                lat1 = order_info[0].srcLoc.latitude
-                lng2 = order_info1[0].srcLoc.longitude
-                lat2 = order_info1[0].srcLoc.latitude
-                edge_weight = DistanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
-                graph.add_edge(index, index + 1, weigh=edge_weight)
+                if order_info and order_info1:
+                    lng1 = order_info[0].srcLoc.longitude
+                    lat1 = order_info[0].srcLoc.latitude
+                    lng2 = order_info1[0].srcLoc.longitude
+                    lat2 = order_info1[0].srcLoc.latitude
+                    edge_weight = DistanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
+                    graph.add_edge(index, index + 1, weigh=edge_weight)
         for index in range(len(planRoutes)):
             # 骑士id 商圈id 骑士所在位置(随着行为变化) 骑士速度 最大载单量
             # 当前行为节点发生的时间 订单编号 行为状态编号
