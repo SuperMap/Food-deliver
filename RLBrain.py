@@ -7,7 +7,7 @@ from typing import List, Dict
 import dgl
 from dgl import graph, DGLGraph
 import torch
-from dgl.nn import GraphConv, GATConv
+from dgl.nn import GraphConv
 from torch import nn
 import torch.nn.functional as F
 import numpy as np
