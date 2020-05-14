@@ -209,6 +209,7 @@ class DeepQNetwork(object):
                         calDistance = distanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
                         calTime = calDistance / courier.speed
                         calActionTime = lastActionTime + calTime
+                    return int(calActionTime)
         else:
             # 如果列表中没有路径 就计算骑手得位置与将要执行动作的距离
             calActionloc1 = order.srcLoc
@@ -302,7 +303,8 @@ class DeepQNetwork(object):
                 # 处理actionNode中 actionType为-1 的情情况，方式为：如果为-1，则不添加该节点，而只是把历史节点构图
                 currentNodes = None
                 if actionNode.actionTime > -1:
-                    currentNodes = historyNodes.append(actionNode)
+                    historyNodes.append(actionNode)
+                    currentNodes = historyNodes
                 else:
                     currentNodes = historyNodes
                 # Todo
