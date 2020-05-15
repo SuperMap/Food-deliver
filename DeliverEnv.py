@@ -91,7 +91,7 @@ class DeliverEnv(object):
         # 调度是否结束
         done = False
         allOrdersStats = [order.status == 4 for order in self.context.orderPool.orders]
-        if reduce(lambda x, y: x & y, allOrdersStats):
+        if self.context.timeStamp> self.doneTimeStamp + 1800 or reduce(lambda x, y: x & y, allOrdersStats):
             done = True
         # 是否还有新上线的骑手和订单
         if self.haveRequest:
