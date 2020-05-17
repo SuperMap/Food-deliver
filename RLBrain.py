@@ -84,6 +84,7 @@ class DeepQNetwork(object):
         if np.random.randn() <= self.epsilon:  # greedy policy
             # 找到每个骑手候选动作中值最大的动作
             for courier, graphs in courierObservationGraphs.items():
+
                 batchGraphs = dgl.batch(graphs)
                 action_value = self.eval_net.forward(batchGraphs)
                 # 找出哪一个最大
@@ -354,12 +355,12 @@ class DeepQNetwork(object):
         orders = courier.orders
         courier_list.extend([id, areaId, courier_latitude, courier_longitude, speed,
                              maxloads, planRoutes, orders])
-        graph_name = id
-        graph = DGLGraph(self.__calculate_graph(courier_list, graph_name))
+        # graph_name = id
+        graph = self.__calculate_graph(courier_list)
         return graph
 
     # 生成图
-    def __calculate_graph(self, courier_list, graph_name):
+    def __calculate_graph(self, courier_list):
         # 图初始化
         # 一个骑士的订单
         id = courier_list[0]
@@ -368,9 +369,10 @@ class DeepQNetwork(object):
         maxloads = courier_list[5]
         orders = courier_list[-1]
         planRoutes = courier_list[-2]
-        graph = nx.Graph(name=graph_name)
+        graph = dgl.DGLGraph()
+
         # 添加节点
-        graph.add_nodes_from([x for x in range(len(planRoutes))])
+        graph.add_nodes(len(planRoutes))
 
         order_unfinish_set = set()
         # 添加边
@@ -394,41 +396,53 @@ class DeepQNetwork(object):
                 # 下一个订单取餐
                 order_info1 = [i for i in orders if i.id == planRoutes[index+1].orderId]
                 if order_info and order_info1:
-                    lng1 = order_info[0].srcLoc.longitude
-                    lat1 = order_info[0].srcLoc.latitude
+                    lng1 = order_info[0].dstLoc.longitude
+                    lat1 = order_info[0].dstLoc.latitude
                     lng2 = order_info1[0].srcLoc.longitude
                     lat2 = order_info1[0].srcLoc.latitude
                     edge_weight = DistanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
                     graph.add_edge(index, index + 1, weigh=edge_weight)
+
         for index in range(len(planRoutes)):
             # 骑士id 商圈id 骑士所在位置(随着行为变化) 骑士速度 最大载单量
             # 当前行为节点发生的时间 订单编号 行为状态编号
-            graph.nodes[index]['id'] = id
-            graph.nodes[index]['areaId'] = areaId
-            graph.nodes[index]['speed'] = speed
-            graph.nodes[index]['maxloads'] = maxloads
-            graph.nodes[index]['action_Time'] = planRoutes[index].actionTime
-            graph.nodes[index]['action_Type'] = planRoutes[index].actionType
+            id = np.array(list([id])).astype('float32')
+            areaId = np.array(list([areaId])).astype('float32')
+            speed = np.array(list([speed])).astype('float32')
+            maxloads = np.array(list([maxloads])).astype('float32')
+            graph.ndata['id'] = id
+            graph.ndata['areaId'] = areaId
+            graph.ndata['speed'] = speed
+            graph.ndata['maxloads'] = maxloads
+            action_Time = np.array(list([planRoutes[index].actionTime])).astype('float32')
+            action_Type = np.array(list([planRoutes[index].actionType])).astype('float32')
+            graph.ndata['action_Time'] = action_Time
+            graph.ndata['action_Type'] = action_Type
             # 找到规划路径行为对应订单
             order_info = [i for i in orders if i.id == planRoutes[index].orderId]
             # 订单创建时间 期望送达时间 预计取货地备货完成时间，骑士不能早于该时间取货
             if order_info :
-                graph.nodes[index]['createTimestamp'] = order_info[0].createTimestamp
-                graph.nodes[index]['promiseDeliverTime'] = order_info[0].promiseDeliverTime
-                graph.nodes[index]['estimatedPrepareCompletedTime'] = order_info[0].estimatedPrepareCompletedTime
+                createTimestamp = np.array(list([order_info[0].createTimestamp])).astype('float32')
+                promiseDeliverTime = np.array(list([order_info[0].promiseDeliverTime])).astype('float32')
+                estimatedPrepareCompletedTime = np.array(list([order_info[0].estimatedPrepareCompletedTime])).astype('float32')
+                graph.ndata['createTimestamp'] = createTimestamp
+                graph.ndata['promiseDeliverTime'] = promiseDeliverTime
+                graph.ndata['estimatedPrepareCompletedTime'] = estimatedPrepareCompletedTime
                 # 如果当前动作是到店 骑士的位置就是订单的取货点 取餐也是 送达时骑士的位置是订单的收货点
                 if planRoutes[index].actionType == 1 or planRoutes[index].actionType == 2:
-                    lng1 = order_info[0].srcLoc.longitude
-                    lat1 = order_info[0].srcLoc.latitude
-                    graph.nodes[index]['courier_latitude'] = lat1
-                    graph.nodes[index]['courier_longitude'] = lng1
-                    graph.nodes[index]['order_id'] = order_info[0].id
+                    lng1 = np.array(list([order_info[0].srcLoc.longitude])).astype('float32')
+                    lat1 = np.array(list([order_info[0].srcLoc.latitude])).astype('float32')
+                    order_id = np.array(list([order_info[0].id])).astype('float32')
+                    graph.ndata['courier_latitude'] = lat1
+                    graph.ndata['courier_longitude'] = lng1
+                    graph.ndata['order_id'] = order_id
                 else:
-                    lng2 = order_info[0].dstloc.longitude
-                    lat2 = order_info[0].dstLoc.latitude
-                    graph.nodes[index]['courier_latitude'] = lat2
-                    graph.nodes[index]['courier_longitude'] = lng2
-                    graph.nodes[index]['order_id'] = order_info[0].id
+                    lng2 = np.array(list([order_info[0].dstloc.longitude])).astype('float32')
+                    lat2 = np.array(list([order_info[0].dstLoc.latitude])).astype('float32')
+                    order_id = np.array(list([order_info[0].id])).astype('float32')
+                    graph.ndata['courier_latitude'] = lat2
+                    graph.ndata['courier_longitude'] = lng2
+                    graph.ndata['order_id'] = order_id
             else:
                 return None
             return graph
