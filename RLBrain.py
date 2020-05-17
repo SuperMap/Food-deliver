@@ -31,7 +31,6 @@ class GCN(nn.Module):
     def forward(self, g):
         # Use node degree as the initial node feature. For undirected graphs, the in-degree
         # is the same as the out_degree.
-
         # expect_time = g.ndata['expect_time'].view(-1, 1).float()
         # promise_deliver_time = g.ndata['promise_deliver_time'].view(-1, 1)
         # courier_level = g.ndata['courier_level'].view(-1, 1)
@@ -379,7 +378,7 @@ class DeepQNetwork(object):
             if planRoutes[index].actionType == 1:
                 graph.add_edge(index, index + 1)
                 distance = np.array(list([1])).astype('float32')
-                graph.edata['distance'] = distance
+                graph.edges[index, index+1].data['distance'] = distance
             elif planRoutes[index].actionType == 2:
                 order_info = [i for i in orders if i.id == planRoutes[index].orderId]
                 lng1 = order_info[0].srcLoc.longitude
@@ -389,7 +388,7 @@ class DeepQNetwork(object):
                 distance = DistanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
                 distance = np.array(list([distance])).astype('float32')
                 graph.add_edge(index, index + 1)
-                graph.edata['distance'] = distance
+                graph.edges[index, index+1].data['distance'] = distance
             else:
                 # 上一个订单送达
                 order_info = [i for i in orders if i.id == planRoutes[index].orderId]
@@ -403,49 +402,13 @@ class DeepQNetwork(object):
                     distance = DistanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
                     distance = np.array(list([distance])).astype('float32')
                     graph.add_edge(index, index + 1)
-                    graph.edata['distance'] = distance
-
-        for index in range(len(planRoutes)):
-            # 骑士id 商圈id 骑士所在位置(随着行为变化) 骑士速度 最大载单量
-            # 当前行为节点发生的时间 订单编号 行为状态编号
-            id = np.array(list([id])).astype('float32')
-            areaId = np.array(list([areaId])).astype('float32')
-            speed = np.array(list([speed])).astype('float32')
-            maxloads = np.array(list([maxloads])).astype('float32')
-            graph.ndata['id'] = id
-            graph.ndata['areaId'] = areaId
-            graph.ndata['speed'] = speed
-            graph.ndata['maxloads'] = maxloads
-            action_Time = np.array(list([planRoutes[index].actionTime])).astype('float32')
-            action_Type = np.array(list([planRoutes[index].actionType])).astype('float32')
-            graph.ndata['action_Time'] = action_Time
-            graph.ndata['action_Type'] = action_Type
-            # 找到规划路径行为对应订单
-            order_info = [i for i in orders if i.id == planRoutes[index].orderId]
-            # 订单创建时间 期望送达时间 预计取货地备货完成时间，骑士不能早于该时间取货
-            if order_info :
-                createTimestamp = np.array(list([order_info[0].createTimestamp])).astype('float32')
-                promiseDeliverTime = np.array(list([order_info[0].promiseDeliverTime])).astype('float32')
-                estimatedPrepareCompletedTime = np.array(list([order_info[0].estimatedPrepareCompletedTime])).astype('float32')
-                graph.ndata['createTimestamp'] = createTimestamp
-                graph.ndata['promiseDeliverTime'] = promiseDeliverTime
-                graph.ndata['estimatedPrepareCompletedTime'] = estimatedPrepareCompletedTime
-                # 如果当前动作是到店 骑士的位置就是订单的取货点 取餐也是 送达时骑士的位置是订单的收货点
-                if planRoutes[index].actionType == 1 or planRoutes[index].actionType == 2:
-                    lng1 = np.array(list([order_info[0].srcLoc.longitude])).astype('float32')
-                    lat1 = np.array(list([order_info[0].srcLoc.latitude])).astype('float32')
-                    order_id = np.array(list([order_info[0].id])).astype('float32')
-                    graph.ndata['courier_latitude'] = lat1
-                    graph.ndata['courier_longitude'] = lng1
-                    graph.ndata['order_id'] = order_id
-                else:
-                    lng2 = np.array(list([order_info[0].dstloc.longitude])).astype('float32')
-                    lat2 = np.array(list([order_info[0].dstLoc.latitude])).astype('float32')
-                    order_id = np.array(list([order_info[0].id])).astype('float32')
-                    graph.ndata['courier_latitude'] = lat2
-                    graph.ndata['courier_longitude'] = lng2
-                    graph.ndata['order_id'] = order_id
-            else:
-                continue
+                    graph.edges[index, index + 1].data['distance'] = distance
+        # 把动作节点时间和类型加入节点属性中
+        action_Time_list = [planRoutes[index].actionTime for index in range(len(planRoutes))]
+        action_Type_list = [planRoutes[index].actionType for index in range(len(planRoutes))]
+        action_Time = np.array(action_Time_list).astype('float32')
+        action_Type = np.array(action_Type_list).astype('float32')
+        graph.ndata['action_Time'] = action_Time
+        graph.ndata['action_Type'] = action_Type
 
         return graph
