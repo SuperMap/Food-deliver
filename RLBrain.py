@@ -374,14 +374,12 @@ class DeepQNetwork(object):
         # 添加节点
         graph.add_nodes(len(planRoutes))
 
-        order_unfinish_set = set()
         # 添加边
         for index in range(len(planRoutes)-1):
-            # order_unfinish_set.add(planRoutes[index].orderId)
-            # 到店取餐
             if planRoutes[index].actionType == 1:
                 graph.add_edge(index, index + 1)
-                graph.edata['distance'] = 1
+                distance = np.array(list([1])).astype('float32')
+                graph.edata['distance'] = distance
             elif planRoutes[index].actionType == 2:
                 order_info = [i for i in orders if i.id == planRoutes[index].orderId]
                 lng1 = order_info[0].srcLoc.longitude
@@ -393,7 +391,6 @@ class DeepQNetwork(object):
                 graph.add_edge(index, index + 1)
                 graph.edata['distance'] = distance
             else:
-                # order_unfinish_set.discard(planRoutes[index].orderId)
                 # 上一个订单送达
                 order_info = [i for i in orders if i.id == planRoutes[index].orderId]
                 # 下一个订单取餐
@@ -449,7 +446,6 @@ class DeepQNetwork(object):
                     graph.ndata['courier_longitude'] = lng2
                     graph.ndata['order_id'] = order_id
             else:
-                return None
-        print(graph)
-        print("1111")
+                continue
+
         return graph
