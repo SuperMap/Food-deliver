@@ -160,6 +160,7 @@ class DeepQNetwork(object):
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+        return self.target_net
 
     def __calActionNodeTime(self, courier, order, currentStats, context):
         """

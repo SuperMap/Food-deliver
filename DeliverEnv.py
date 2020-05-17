@@ -144,7 +144,8 @@ class DeliverEnv(object):
         # 下一步状态
         return self.context, self.reward, done
 
-    def render(self):
-        print(self.context.timeStamp, self.context.orderPool, self.reward)
+    def render(self, episode, step):
+        if step % 10 == 0:
+            print(episode, self.context.timeStamp, self.reward)
 
 

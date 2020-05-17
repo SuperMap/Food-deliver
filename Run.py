@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 # @Author  : woleto
 # @Time    : 2020/5/11 10:41
+import torch
+
 from DeliverEnv import DeliverEnv
 from RLBrain import DeepQNetwork
 
+MODELSAVEDIR = 'model'
 
 def runDeliver():
     step = 0
@@ -13,7 +16,7 @@ def runDeliver():
 
         while True:
             # fresh env
-            env.render()
+            env.render(episode, step)
 
             # RL choose action based on observation
             action = RL.choose_action(observation)
@@ -23,14 +26,16 @@ def runDeliver():
 
             RL.store_transition(observation, action, reward, observation_)
 
+            model = None
             if (step > 200) and (step % 5 == 0):
-                RL.learn()
+                model = RL.learn()
 
             # swap observation
             observation = observation_
 
             # break while loop when end of this episode
             if done:
+                torch.save(model, MODELSAVEDIR + '/' + env.areaId + '.pkl')
                 break
             step += 1
 
