@@ -38,7 +38,6 @@ class GCN(nn.Module):
         # courier_speed = g.ndata['courier_speed'].view(-1, 1)
         # h = np.stack((expect_time, promise_deliver_time, courier_level, courier_speed),1).reshape(-1, 4)
         # h = torch.as_tensor(h)
-
         h = g.in_degrees().view(-1, 1).float()
         # print(h.shape)
         # Perform graph convolution and activation function.
@@ -327,6 +326,7 @@ class DeepQNetwork(object):
                 # currentGraph.ndata['h'] = np.array([1, 2, 3, 4])
 
                 courierGraphs.get(courier).append(currentGraph)
+
         return courierCandidateActions, courierGraphs,
 
     def __generateGraph(self, courier: Courier, currentNodes):
@@ -380,15 +380,18 @@ class DeepQNetwork(object):
             # order_unfinish_set.add(planRoutes[index].orderId)
             # 到店取餐
             if planRoutes[index].actionType == 1:
-                graph.add_edge(index, index + 1, weigh=1)
+                graph.add_edge(index, index + 1)
+                graph.edata['distance'] = 1
             elif planRoutes[index].actionType == 2:
                 order_info = [i for i in orders if i.id == planRoutes[index].orderId]
                 lng1 = order_info[0].srcLoc.longitude
                 lat1 = order_info[0].srcLoc.latitude
                 lng2 = order_info[0].dstLoc.longitude
                 lat2 = order_info[0].dstLoc.latitude
-                edge_weight = DistanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
-                graph.add_edge(index, index + 1, weigh=edge_weight)
+                distance = DistanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
+                distance = np.array(list([distance])).astype('float32')
+                graph.add_edge(index, index + 1)
+                graph.edata['distance'] = distance
             else:
                 # order_unfinish_set.discard(planRoutes[index].orderId)
                 # 上一个订单送达
@@ -400,8 +403,10 @@ class DeepQNetwork(object):
                     lat1 = order_info[0].dstLoc.latitude
                     lng2 = order_info1[0].srcLoc.longitude
                     lat2 = order_info1[0].srcLoc.latitude
-                    edge_weight = DistanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
-                    graph.add_edge(index, index + 1, weigh=edge_weight)
+                    distance = DistanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
+                    distance = np.array(list([distance])).astype('float32')
+                    graph.add_edge(index, index + 1)
+                    graph.edata['distance'] = distance
 
         for index in range(len(planRoutes)):
             # 骑士id 商圈id 骑士所在位置(随着行为变化) 骑士速度 最大载单量
@@ -445,4 +450,6 @@ class DeepQNetwork(object):
                     graph.ndata['order_id'] = order_id
             else:
                 return None
-            return graph
+        print(graph)
+        print("1111")
+        return graph
