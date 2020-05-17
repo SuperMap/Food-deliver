@@ -447,5 +447,4 @@ class DeepQNetwork(object):
                     graph.ndata['order_id'] = order_id
             else:
                 continue
-
         return graph
