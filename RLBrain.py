@@ -16,9 +16,10 @@ from demo.dto import Courier, ActionNode
 from demo.util import DistanceUtils
 
 
+
 class GCN(nn.Module):
     def __init__(self):
-        in_dim = 1
+        in_dim = 2
         hidden_dim = 256
         n_classes = 2
         super(GCN, self).__init__()
@@ -37,7 +38,13 @@ class GCN(nn.Module):
         # courier_speed = g.ndata['courier_speed'].view(-1, 1)
         # h = np.stack((expect_time, promise_deliver_time, courier_level, courier_speed),1).reshape(-1, 4)
         # h = torch.as_tensor(h)
-        h = g.in_degrees().view(-1, 1).float()
+        # 加入节点特征
+        action_Time = g.ndata['action_Time'].view(-1,1).float()
+        action_Type = g.ndata['action_Type'].view(-1,1).float()
+        h = np.stack((action_Time, action_Type), 1).reshape(-1, 2)
+        h = torch.as_tensor(h)
+
+        # h = g.in_degrees().view(-1, 1).float()
         # print(h.shape)
         # Perform graph convolution and activation function.
         h = F.relu(self.conv1(g, h))
@@ -87,6 +94,7 @@ class DeepQNetwork(object):
                 action_value = self.eval_net.forward(batchGraphs)
                 # 找出哪一个最大
                 maxIndex = action_value[:, 0].argmax(0)
+
                 actions[courier] = courierCandidateActions.get(courier)[maxIndex]
         else:  # random policy
             # 在候选动作中随机选择一个动作，构造ActionNode类进行返回
