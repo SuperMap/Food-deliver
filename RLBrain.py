@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # @Author  : woleto
 # @Time    : 2020/5/11 10:46
+import copy
 import random
 from typing import List, Dict
 
@@ -82,7 +83,6 @@ class DeepQNetwork(object):
         if np.random.randn() <= self.epsilon:  # greedy policy
             # 找到每个骑手候选动作中值最大的动作
             for courier, graphs in courierObservationGraphs.items():
-
                 batchGraphs = dgl.batch(graphs)
                 action_value = self.eval_net.forward(batchGraphs)
                 # 找出哪一个最大
@@ -249,9 +249,6 @@ class DeepQNetwork(object):
 
     def __calGraphsByObservation(self, observation, actions: Dict[Courier, ActionNode] = None):
         """
-        待解决的问题： 2020-5-12 20:35:34
-        1.生成节点时没有计算动作完成时间戳,考虑取餐时间戳要大于制作完成的时间
-        2.节点构图
         Note:
             1.返回的Dict[Courier, List[graph]]， 列表有可能为空，代表没有候选动作。没有设计什么也不做的动作。
         :param batch_observation:
@@ -268,7 +265,7 @@ class DeepQNetwork(object):
                 # 如果最后一个执行动作没有做完，则添加一个actionType为-1的actionNode，代表什么也不做
                 if len(courier.planRoutes) > 0:
                     if courier.planRoutes[-1].actionType != -1:
-                        if courier.planRoutes[-1].actionTime < observation.timeStamp:
+                        if observation.timeStamp < courier.planRoutes[-1].actionTime:
                             candidateActionNode = ActionNode(-1, None, -1, None, None)
                             courierCandidateActions.get(courier).append(candidateActionNode)
                             continue
@@ -296,6 +293,13 @@ class DeepQNetwork(object):
                     addActionNode = ActionNode(1, newOrder.id, self.__calActionNodeTime(courier, newOrder, 1, observation), None, None)
                     actionNodes.append(addActionNode)
 
+            # 修改版，随机将新动作添加到一个骑手
+            # for newOrder in newOrders:
+            #     if len(courierCandidateActions) > 0:
+            #         courier, actionNodes = courierCandidateActions.popitem()
+            #         addActionNode = ActionNode(1, newOrder.id, self.__calActionNodeTime(courier, newOrder, 1, observation), None, None)
+            #         actionNodes.append(addActionNode)
+
             # 3. 如果没有动作可以做，则添加一个什么也不做的动作
             for courier, actions in courierCandidateActions.items():
                 if len(actions) == 0:
@@ -308,7 +312,7 @@ class DeepQNetwork(object):
         # 2.1 使用courierCandidateActions构造图
         for courier, actionNodes in courierCandidateActions.items():
             courierGraphs[courier] = list()
-            historyNodes = courier.planRoutes
+            historyNodes = copy.deepcopy(courier.planRoutes)
             for actionNode in actionNodes:
                 # 处理actionNode中 actionType为-1 的情情况，方式为：如果为-1，则不添加该节点，而只是把历史节点构图
                 currentNodes = historyNodes
@@ -360,6 +364,7 @@ class DeepQNetwork(object):
 
     # 生成图
     def __calculate_graph(self, courier_list):
+        distanceUtils = DistanceUtils()
         # 图初始化
         # 一个骑士的订单
         id = courier_list[0]
@@ -385,7 +390,7 @@ class DeepQNetwork(object):
                 lat1 = order_info[0].srcLoc.latitude
                 lng2 = order_info[0].dstLoc.longitude
                 lat2 = order_info[0].dstLoc.latitude
-                distance = DistanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
+                distance = distanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
                 distance = np.array(list([distance])).astype('float32')
                 graph.add_edge(index, index + 1)
                 graph.edges[index, index+1].data['distance'] = distance
@@ -399,7 +404,7 @@ class DeepQNetwork(object):
                     lat1 = order_info[0].dstLoc.latitude
                     lng2 = order_info1[0].srcLoc.longitude
                     lat2 = order_info1[0].srcLoc.latitude
-                    distance = DistanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
+                    distance = distanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
                     distance = np.array(list([distance])).astype('float32')
                     graph.add_edge(index, index + 1)
                     graph.edges[index, index + 1].data['distance'] = distance
@@ -410,5 +415,4 @@ class DeepQNetwork(object):
         action_Type = np.array(action_Type_list).astype('float32')
         graph.ndata['action_Time'] = action_Time
         graph.ndata['action_Type'] = action_Type
-
         return graph

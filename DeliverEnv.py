@@ -119,17 +119,21 @@ class DeliverEnv(object):
             if cp.actionType == 1:
                 allocatedOrders.append(cp.orderId)
         self.context.markAllocatedOrders(allocatedOrders)
-        # 1.3 根据courierActions修改骑手池的plan
+        # 1.3 根据courierActions修改骑手池的订单与planroutes
         for courier, actionNode in courierActions.items():
             for courierInPool in self.context.courierPool.couriers:
-                if courier.id == courierInPool.id:
-                    courierInPool.planRoutes.append(actionNode)
+                for orderInPool in self.context.orderPool.orders:
+                    if courier.id == courierInPool.id and actionNode.orderId == orderInPool.id:
+                        orderSet = set(courierInPool.orders)
+                        orderSet.add(orderInPool)
+                        courierInPool.orders = list(orderSet)
+                        courierInPool.planRoutes.append(actionNode)
 
         # 2.检查按时、超时、还未完成订单，分别给1分、-1分、0分
         self.reward = 0
         for order in self.context.orderPool.orders:
             if order.status != 4:
-                break
+                continue
             # 得到当前单的完成时间
             for courier in self.context.courierPool.couriers:
                 for actionNode in courier.planRoutes:
@@ -145,7 +149,6 @@ class DeliverEnv(object):
         return self.context, self.reward, done
 
     def render(self, episode, step):
-        if step % 10 == 0:
             print(episode, self.context.timeStamp, self.reward)
 
 

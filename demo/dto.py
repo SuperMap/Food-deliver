@@ -1,4 +1,5 @@
-from typing import Dict, List
+from typing import Dict, List, Set
+
 
 class Location(object):
     def __init__(self, _latitude, _longitude):
