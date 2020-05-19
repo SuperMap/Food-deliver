@@ -178,7 +178,7 @@ class DeepQNetwork(object):
         :return:
         """
         distanceUtils = DistanceUtils()
-        if len(courier.planRoutes) == 0 or courier.planRoutes[-1].actionType == -1:
+        if not courier.planRoutes:
             calActionloc1 = order.srcLoc
             calActionloc2 = order.dstLoc
             lng1 = courier.loc.longitude
@@ -217,13 +217,8 @@ class DeepQNetwork(object):
             order_info = [i for i in context.orderPool.orders if lastActionNode.orderId == i.id]
             if order_info:
                 if lastActionType == 1 or lastActionType == 2:
-                    if order_info:
-                        # 取到最后一个动作所在订单得取货地
-                        lastActionloc = order_info[0].srcLoc
-                    else:
-                        # 取到最后一个动作所在订单得送货地
-                        lastActionloc = order_info[0].dstLoc
-                    # 得到要计算的动作所在的位置
+                     # 取到最后一个动作所在订单得取货地
+                    lastActionloc = order_info[0].srcLoc
                     calActionloc1 = order.srcLoc
                     calActionloc2 = order.dstLoc
                     lng1 = lastActionloc.longitude
@@ -253,7 +248,41 @@ class DeepQNetwork(object):
                         calDistance = distanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
                         calTime = calDistance / courier.speed
                         calActionTime = lastActionTime + calTime
-                    return int(calActionTime)
+                else:
+                    # 取到最后一个动作所在订单得取货地
+                    # lastActionloc = order_info[0].srcLoc
+                    # 取到最后一个动作所在订单得送货地
+                    lastActionloc = order_info[0].dstLoc
+                    calActionloc1 = order.srcLoc
+                    calActionloc2 = order.dstLoc
+                    lng1 = lastActionloc.longitude
+                    lat1 = lastActionloc.latitude
+                    if currentStats == 1:
+                        lng2 = calActionloc1.longitude
+                        lat2 = calActionloc1.latitude
+                        calDistance = distanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
+                        calTime = calDistance / courier.speed
+                        # lastActionTime + 所需时间
+                        calActionTime = lastActionTime + calTime
+                    elif currentStats == 2:
+                        # 计算距离，除速度得到所需时间，如果这一步是取餐（2），则要在订单做出来之后
+                        lng2 = calActionloc1.longitude
+                        lat2 = calActionloc1.latitude
+                        calDistance = distanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
+                        calTime = calDistance / courier.speed
+                        # 骑手到店时间 = 最后一个动作完成的时间+所需的时间
+                        courier_arriveTime = lastActionTime + calTime
+                        if courier_arriveTime < order.estimatedPrepareCompletedTime:
+                            calActionTime = order.estimatedPrepareCompletedTime
+                        else:
+                            calActionTime = courier_arriveTime
+                    else:
+                        lng2 = calActionloc2.longitude
+                        lat2 = calActionloc2.latitude
+                        calDistance = distanceUtils.greatCircleDistance(lng1, lat1, lng2, lat2)
+                        calTime = calDistance / courier.speed
+                        calActionTime = lastActionTime + calTime
+                return int(calActionTime)
 
     def __calGraphsByObservation(self, observation, actions: Dict[Courier, ActionNode] = None):
         """
